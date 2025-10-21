@@ -65,14 +65,15 @@ class ServiceBroadcaster:
 
 
 class LazyServer:
-    def __init__(self, name, host="0.0.0.0", port=1726, **properties):
+    def __init__(self, name, host="0.0.0.0", port=8765, broadcast=True, **properties):
         self.name = name
         self.properties = properties
         self.host = host
         self.port = port
+        self.broadcast = broadcast
         self.server = None
+        self.loop = None
         self.clients = set()
-        self.queue = Queue()
 
     async def handler(self, client):
         logger.debug("Client connected")
@@ -94,13 +95,15 @@ class LazyServer:
         await self.server.wait_closed()
 
     def start(self):
-        logger.debug("Starting broadcaster...")
-        broadcaster = ServiceBroadcaster(self.port, self.name, self.properties)
-        broadcast_thread = threading.Thread(target=broadcaster.run, daemon=True)
-        broadcast_thread.start()
-        logger.debug("Starting server...")
+        if self.broadcast:
+            broadcaster = ServiceBroadcaster(self.port, self.name, self.properties)
+            broadcast_thread = threading.Thread(target=broadcaster.run, daemon=True)
+            broadcast_thread.start()
+        
         # Create event loop and run server
+        logger.debug("Starting server...")
         loop = asyncio.new_event_loop()
+        self.loop = loop
         asyncio.set_event_loop(loop)
         try:
             loop.run_until_complete(self._start())
@@ -109,6 +112,10 @@ class LazyServer:
         finally:
             loop.close()
 
+    def process_message(self, client, message):
+        logger.info(f"Processing message from client: {message}")
+        pass
+
 if __name__ == "__main__":
-    server = LazyServer(name="LazyServer")
+    server = LazyServer(name="LazyServer", host="0.0.0.0", broadcast=True)
     server.start()
