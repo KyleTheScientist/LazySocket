@@ -16,6 +16,7 @@ if not logger.hasHandlers():
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
+
 class ServiceBroadcaster:
 
     def __init__(self, port, name, properties):
@@ -65,6 +66,7 @@ class ServiceBroadcaster:
 
 
 class LazyServer:
+
     def __init__(self, name, host="0.0.0.0", port=8765, broadcast=True, **properties):
         self.name = name
         self.properties = properties
@@ -74,6 +76,28 @@ class LazyServer:
         self.server = None
         self.loop = None
         self.clients = set()
+    
+    def send(self, message, client=None):
+        if self.loop is None or not self.loop.is_running():
+            raise RuntimeError("Server event loop is not running")
+
+       
+        if client is not None:
+            asyncio.run_coroutine_threadsafe(self._send(client, message), self.loop)
+        else:
+            for c in list(self.clients):
+                asyncio.run_coroutine_threadsafe(self._send(c, message), self.loop)
+
+    async def _send(self, c, message):
+        try:
+            await c.send(message)
+        except Exception as e:
+            logger.debug(f"Error sending message to client: {e}")
+            try:
+                await c.close()
+            except Exception:
+                pass
+
 
     async def handler(self, client):
         logger.debug("Client connected")
@@ -99,7 +123,7 @@ class LazyServer:
             broadcaster = ServiceBroadcaster(self.port, self.name, self.properties)
             broadcast_thread = threading.Thread(target=broadcaster.run, daemon=True)
             broadcast_thread.start()
-        
+
         # Create event loop and run server
         logger.debug("Starting server...")
         loop = asyncio.new_event_loop()
@@ -115,6 +139,7 @@ class LazyServer:
     def process_message(self, client, message):
         logger.info(f"Processing message from client: {message}")
         pass
+
 
 if __name__ == "__main__":
     server = LazyServer(name="LazyServer", host="0.0.0.0", broadcast=True)
