@@ -54,7 +54,6 @@ class LazyListener(ServiceListener):
                 "name": name,
                 "address": address,
                 "port": info.port,
-                "properties": properties,
             }
             logger.info(f"(LazyListener) Discovered service: {name}")
             logger.info(f"    {self.service}")
@@ -62,8 +61,9 @@ class LazyListener(ServiceListener):
 
 class LazyClient:
 
-    def __init__(self):
-        self.service = None
+    def __init__(self, address: str = None, port: int = None, reconnect: bool = True):
+        self.reconnect = reconnect
+        self.service = {"address": address, "port": port} if address and port else None
         self.socket = None
         self.queue = Queue()
         self.thread = threading.Thread(target=self._start_loop, daemon=True)
@@ -73,6 +73,9 @@ class LazyClient:
 
     def send(self, message):
         asyncio.run_coroutine_threadsafe(self._send(message), self.loop)
+
+    def stop(self):
+        asyncio.run_coroutine_threadsafe(self._close(), self.loop)
 
     def _start_loop(self):
         self.loop = asyncio.new_event_loop()
@@ -111,6 +114,7 @@ class LazyClient:
             self.queue.put(f"lazy_client:connected:{uri}")
         except Exception as e:
             logger.error(f"Failed to connect to {uri}: {e}")
+            self.queue.put(f"lazy_client:error:connect:{e}")
 
     async def _close(self):
         if self.socket:
@@ -118,12 +122,20 @@ class LazyClient:
             await self.socket.close()
 
     async def _connect_and_listen(self):
-        await self._find_service()
+        if not self.service:
+            await self._find_service()
+        
         if self.service:
             await self._connect(reconnect=False)
 
         while True:
             try:
+                if not self.socket or self.socket.closed:
+                    if self.reconnect:
+                        await self._connect()
+                        continue
+                    else:
+                        break
                 response = await self.socket.recv()
                 logger.info(f"Received message: {response}")
                 self.queue.put(response)
