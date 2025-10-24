@@ -130,7 +130,7 @@ class LazyClient:
 
         while True:
             try:
-                if not self.socket or self.socket.closed:
+                if not self.socket or self.socket.state > websockets.protocol.State.OPEN:
                     if self.reconnect:
                         await self._connect()
                         continue
