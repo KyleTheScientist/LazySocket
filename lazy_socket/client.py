@@ -95,8 +95,8 @@ class LazyClient:
                 return
             await asyncio.sleep(1)
 
-    async def _connect(self, reconnect=True):
-        if reconnect:
+    async def _connect(self, reconnecting=True):
+        if reconnecting:
             logger.info("Reconnecting to service...")
             self.queue.put("lazy_client:reconnecting")
         else:
@@ -126,7 +126,7 @@ class LazyClient:
             await self._find_service()
         
         if self.service:
-            await self._connect(reconnect=False)
+            await self._connect(reconnecting=False)
 
         while True:
             try:
@@ -140,7 +140,8 @@ class LazyClient:
                 logger.info(f"Received message: {response}")
                 self.queue.put(response)
             except ConnectionClosed:
-                await self._connect()
+                if self.reconnect:
+                    await self._connect()
             except Exception as e:
                 logger.error(f"Error during receive: {e}")
                 await asyncio.sleep(5)
@@ -149,7 +150,8 @@ class LazyClient:
         try:
             await self.socket.send(message)
         except ConnectionClosed:
-            await self._connect()
+            if self.reconnect:
+                await self._connect()
         except Exception as e:
             logger.error(f"Error sending message: {e}")
             self.queue.put(f"lazy_client:error:send:{e}")
