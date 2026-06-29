@@ -61,9 +61,10 @@ class LazyListener(ServiceListener):
 
 class LazyClient:
 
-    def __init__(self, address: str = None, port: int = None, reconnect: bool = True):
-        self.reconnect = reconnect
+    def __init__(self, address: str = None, port: int = None, reconnect: bool = True, **websocket_kwargs):
         self.service = {"address": address, "port": port} if address and port else None
+        self.reconnect = reconnect
+        self.websocket_kwargs = websocket_kwargs
         self.socket = None
         self.queue = Queue()
         self.thread = threading.Thread(target=self._start_loop, daemon=True)
@@ -109,7 +110,7 @@ class LazyClient:
 
         uri = f"ws://{self.service['address']}:{self.service['port']}"
         try:
-            self.socket = await websockets.connect(uri)
+            self.socket = await websockets.connect(uri, **self.websocket_kwargs)
             logger.info(f"Connected to {uri}")
             self.queue.put(f"lazy_client:connected:{uri}")
         except Exception as e:
